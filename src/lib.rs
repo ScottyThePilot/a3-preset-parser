@@ -24,16 +24,6 @@ pub enum Game {
   DayZ
 }
 
-impl Game {
-  fn from_attr_value(s: &str) -> Option<Self> {
-    match s {
-      "arma:Type" => Some(Self::Arma),
-      "dayz:Type" => Some(Self::DayZ),
-      _ => None
-    }
-  }
-}
-
 impl fmt::Display for Game {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     f.write_str(match self {
@@ -85,21 +75,29 @@ impl fmt::Display for PresetDlc {
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Preset {
   pub game: Game,
+  pub preset_name: Option<String>,
   pub steam_mods: Vec<PresetSteamMod>,
   pub local_mods: Vec<PresetLocalMod>,
-  pub dlc: Vec<PresetDlc>
+  pub dlcs: Vec<PresetDlc>
 }
 
 impl fmt::Display for Preset {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    writeln!(f, "{} Preset", self.game)?;
+    if let Some(preset_name) = self.preset_name.as_deref() {
+      writeln!(f, "{} Preset: {preset_name}", self.game)?;
+    } else {
+      writeln!(f, "{} Preset", self.game)?;
+    };
+
     for m in self.steam_mods.iter() {
       writeln!(f, "Steam: {m}")?;
     };
+
     for m in self.local_mods.iter() {
       writeln!(f, "Local: {m}")?;
     };
-    for m in self.dlc.iter() {
+
+    for m in self.dlcs.iter() {
       writeln!(f, "DLC: {m}")?;
     };
 
@@ -111,7 +109,7 @@ impl fmt::Display for Preset {
 pub enum Error {
   #[error("preset type selector failed on html: {0}")]
   SelectorFailedPresetType(String),
-  #[error("invalid preset type value {0:?}, expected one of 'arma:Type' or 'dayz:Type'")]
+  #[error("invalid preset type value {0:?}, expected one of 'preset' or 'list'")]
   InvalidPresetTypeValue(String),
   #[error("item origin selector failed on html: {0}")]
   SelectorFailedItemOrigin(String),
@@ -132,7 +130,10 @@ impl FromStr for Preset {
 
   fn from_str(document_text: &str) -> Result<Self, Self::Err> {
     lazy_selectors!{
-      static SELECTOR_PRESET_TYPE = "head > meta[name]";
+      static SELECTOR_PRESET_TYPE_ARMA = "head > meta[name=\"arma:Type\"][content]";
+      static SELECTOR_PRESET_NAME_ARMA = "head > meta[name=\"arma:PresetName\"][content]";
+      static SELECTOR_PRESET_TYPE_DAYZ = "head > meta[name=\"dayz:Type\"][content]";
+      static SELECTOR_PRESET_NAME_DAYZ = "head > meta[name=\"dayz:PresetName\"][content]";
       static SELECTOR_MOD_CONTAINER = "body > div.mod-list > table tr[data-type=\"ModContainer\"]";
       static SELECTOR_DLC_CONTAINER = "body > div.dlc-list > table tr[data-type=\"DlcContainer\"]";
       static SELECTOR_ITEM_NAME = "td[data-type=\"DisplayName\"]";
@@ -140,10 +141,32 @@ impl FromStr for Preset {
       static SELECTOR_ITEM_ORIGIN = "td > span[class]";
     }
 
-    fn select_preset_type(document: &Html) -> Result<&str, Error> {
-      document.select(&SELECTOR_PRESET_TYPE).next()
-        .and_then(|element| element.value().attr("name"))
-        .ok_or_else(|| Error::SelectorFailedPresetType(document.html()))
+    fn select_preset_type(document: &Html) -> Result<Game, Error> {
+      let [arma, dayz] = [
+        (&SELECTOR_PRESET_TYPE_ARMA, Game::Arma),
+        (&SELECTOR_PRESET_TYPE_DAYZ, Game::DayZ)
+      ].map(|(selector, game)| {
+        document.select(selector).next()
+          .and_then(|element| element.value().attr("content"))
+          .ok_or_else(|| Error::SelectorFailedPresetType(document.html()))
+          .and_then(|content| if ["list", "preset"].contains(&content) {
+            Ok(game)
+          } else {
+            Err(Error::InvalidPresetTypeValue(content.to_owned()))
+          })
+      });
+
+      Result::or(arma, dayz)
+    }
+
+    fn select_preset_name_arma(document: &Html) -> Option<&str> {
+      document.select(&SELECTOR_PRESET_NAME_ARMA).next()
+        .and_then(|element| element.value().attr("content"))
+    }
+
+    fn select_preset_name_dayz(document: &Html) -> Option<&str> {
+      document.select(&SELECTOR_PRESET_NAME_DAYZ).next()
+        .and_then(|element| element.value().attr("content"))
     }
 
     fn select_item_name(element: ElementRef<'_>) -> Result<&str, Error> {
@@ -166,9 +189,12 @@ impl FromStr for Preset {
 
     let document = Html::parse_document(&document_text);
 
-    let preset_type = select_preset_type(&document)?;
-    let game = Game::from_attr_value(preset_type)
-      .ok_or_else(|| Error::InvalidPresetTypeValue(preset_type.to_owned()))?;
+    let game = select_preset_type(&document)?;
+
+    let preset_name = match game {
+      Game::Arma => select_preset_name_arma(&document),
+      Game::DayZ => select_preset_name_dayz(&document),
+    };
 
     let mut steam_mods = Vec::new();
     let mut local_mods = Vec::new();
@@ -191,16 +217,22 @@ impl FromStr for Preset {
       };
     };
 
-    let mut dlc = Vec::new();
+    let mut dlcs = Vec::new();
     for dlc_element in document.select(&SELECTOR_DLC_CONTAINER) {
       let display_name = select_item_name(dlc_element)?;
       let link = select_item_link(dlc_element)?;
       let id = get_steam_link_steam_app_id(link)
         .ok_or_else(|| Error::InvalidItemLinkSteamApp(link.to_owned()))?;
-      dlc.push(PresetDlc { display_name: display_name.to_owned(), id });
+      dlcs.push(PresetDlc { display_name: display_name.to_owned(), id });
     };
 
-    Ok(Preset { game, steam_mods, local_mods, dlc })
+    Ok(Preset {
+      game,
+      preset_name: preset_name.map(str::to_owned),
+      steam_mods,
+      local_mods,
+      dlcs
+    })
   }
 }
 
