@@ -1,4 +1,6 @@
 use scraper::{ElementRef, Html, Selector};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use std::fmt;
@@ -16,6 +18,7 @@ macro_rules! lazy_selectors {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum Game {
   Arma,
   DayZ
@@ -41,6 +44,7 @@ impl fmt::Display for Game {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct PresetSteamMod {
   pub display_name: String,
   pub id: u64
@@ -53,6 +57,7 @@ impl fmt::Display for PresetSteamMod {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct PresetLocalMod {
   pub display_name: String
 }
@@ -64,6 +69,7 @@ impl fmt::Display for PresetLocalMod {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct PresetDlc {
   pub display_name: String,
   pub id: u64
@@ -76,6 +82,7 @@ impl fmt::Display for PresetDlc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Preset {
   pub game: Game,
   pub steam_mods: Vec<PresetSteamMod>,

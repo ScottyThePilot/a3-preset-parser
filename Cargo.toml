@@ -4,5 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-scraper = "0.23.1"
-thiserror = "1.0"
+scraper = { version = "0.23.1" }
+thiserror = { version = "1.0" }
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[dev-dependencies]
+anyhow = { version = "1.0" }
+fs-err = { version = "3.1.0" }
+
+[features]
+default = []
+serde = ["dep:serde"]
