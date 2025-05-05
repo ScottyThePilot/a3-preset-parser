@@ -1,0 +1,8 @@
+[package]
+name = "a3-preset-parser"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+scraper = "0.23.1"
+thiserror = "1.0"
