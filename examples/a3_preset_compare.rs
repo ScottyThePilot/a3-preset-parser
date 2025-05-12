@@ -95,7 +95,12 @@ impl<'p> fmt::Display for PresetsCompare<'p> {
 }
 
 fn main() {
-  run().expect("error");
+  if let Err(err) = run() {
+    eprintln!("{err}");
+  };
+
+  use std::io::prelude::*;
+  let _ = std::io::stdin().lock().read(&mut []);
 }
 
 fn run() -> Result<(), Error> {
@@ -125,24 +130,20 @@ fn run() -> Result<(), Error> {
     preset2_name.push_str(" (2)");
   };
 
-  let out = if preset1.game == preset2.game {
+  if preset1.game == preset2.game {
     if preset1.steam_mods == preset2.steam_mods && preset1.local_mods == preset2.local_mods && preset1.dlcs == preset2.dlcs {
-      format!("Presets '{preset1_name}' and '{preset2_name}' have identical contents")
+      println!("Presets '{preset1_name}' and '{preset2_name}' have identical contents");
     } else {
-      (PresetsCompare {
+      println!("{}", PresetsCompare {
         preset1: &preset1,
         preset1_name: &preset1_name,
         preset2: &preset2,
         preset2_name: &preset2_name
-      }).to_string()
+      });
     }
   } else {
-    format!("Presets '{preset1_name}' and '{preset2_name}' do not belong to the same game")
+    println!("Presets '{preset1_name}' and '{preset2_name}' do not belong to the same game");
   };
-
-  let out_path = PathBuf::from("./out.txt");
-  fs::write(&out_path, out)
-    .with_context(|| format!("failed to write to {}", out_path.display()))?;
 
   Ok(())
 }
